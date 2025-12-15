@@ -15,104 +15,44 @@ from fsrl.utils.net.common import ActorCritic
 
 
 class PPOLagAgent(OnpolicyAgent):
-    """Proximal Policy Optimization (PPO) with PID Lagrangian agent.
-
-    More details, please refer to https://arxiv.org/abs/1707.06347 (PPO) and
-    https://arxiv.org/abs/2007.03964 (PID Lagrangian).
-
-    :param gym.Env env: The environment to train and evaluate the agent on.
-    :param BaseLogger logger: A logger instance to log training and evaluation
-        statistics, default to a dummy logger.
-    :param float cost_limit: the constraint limit(s) for the Lagrangian optimization.
-        Default is 10.
-    :param str device: The device to use for training and inference, default to "cpu".
-    :param int thread: The number of threads to use for training, ignored if `device` is
-        "cuda", default to 4.
-    :param int seed: The random seed for reproducibility, default to 10.
-    :param float lr: The learning rate, default to 5e-4.
-    :param Tuple[int, ...] hidden_sizes: The sizes of the hidden layers for the policy
-        and value networks, default to (128, 128).
-    :param bool unbounded: Whether the action space is unbounded, default to False.
-    :param bool last_layer_scale: Whether to scale the last layer output for the policy
-        network, default to False.
-    :param float target_kl: the target KL divergence for the PPO update. Default is 0.02.
-    :param float vf_coef: the value function coefficient for the loss function. Default
-        is 0.25.
-    :param Optional[float] max_grad_norm: the maximum gradient norm for gradient clipping
-        (None for no clipping). Default is None.
-    :param float gae_lambda: the Generalized Advantage Estimation (GAE) parameter.
-        Default is 0.95.
-    :param float eps_clip: the PPO clipping parameter for the policy update. Default is
-        0.2.
-    :param Optional[float] dual_clip: the PPO dual clipping parameter (None for no dual
-        clipping). Default is None.
-    :param bool value_clip: whether to clip the value function update. Default is False.
-    :param bool advantage_normalization: whether to normalize the advantages. Default is
-        True.
-    :param bool recompute_advantage: whether to recompute the advantages during the
-        optimization process. Default is False.
-    :param bool use_lagrangian: whether to use the Lagrangian constraint optimization.
-        Default is True.
-    :param List lagrangian_pid: the PID coefficients for the Lagrangian constraint
-        optimization. Default is [0.05, 0.0005, 0.1].
-    :param bool rescaling: whether use the rescaling trick for Lagrangian multiplier, see
-        Alg. 1 in http://proceedings.mlr.press/v119/stooke20a/stooke20a.pdf
-    :param float gamma: the discount factor for future rewards. Default is 0.99.
-    :param int max_batchsize: the maximum size of the batch when computing GAE, depends
-        on the size of available memory and the memory cost of the model; should be as
-        large as possible within the memory constraint. Default to 99999.
-    :param bool reward_normalization: whether to normalize the rewards. Default is False.
-    :param bool deterministic_eval: whether to use deterministic actions during
-        evaluation. Default is True.
-    :param bool action_scaling: whether to scale actions based on the action space.
-        Default is True.
-    :param str action_bound_method: the method used to handle out-of-bound actions.
-        Default is "clip".
-    :param Optional[torch.optim.lr_scheduler.LambdaLR] lr_scheduler: the learning rate
-        scheduler. Default is None.
-
-    .. seealso::
-
-        Please refer to :class:`~fsrl.agent.BaseAgent` and
-        :class:`~fsrl.agent.OnpolicyAgent` for more details of usage.
-    """
+    """带PID拉格朗日的近端策略优化（PPO）智能体。"""
 
     name = "PPOLagAgent"
 
     def __init__(
         self,
-        env: gym.Env,
-        logger: BaseLogger = BaseLogger(),
-        cost_limit: float = 10,
-        device: str = "cpu",
-        thread: int = 4,  # if use "cpu" to train
-        seed: int = 10,
-        lr: float = 5e-4,
-        hidden_sizes: Tuple[int, ...] = (128, 128),
-        unbounded: bool = False,
-        last_layer_scale: bool = False,
-        # PPO specific arguments
-        target_kl: float = 0.02,
-        vf_coef: float = 0.25,
-        max_grad_norm: Optional[float] = None,
-        gae_lambda: float = 0.95,
-        eps_clip: float = 0.2,
-        dual_clip: Optional[float] = None,
-        value_clip: bool = False,
-        advantage_normalization: bool = True,
-        recompute_advantage: bool = False,
-        # Lagrangian specific arguments
-        use_lagrangian: bool = True,
-        lagrangian_pid: Tuple = (0.05, 0.0005, 0.1),
-        rescaling: bool = True,
-        # Base policy common arguments
-        gamma: float = 0.99,
-        max_batchsize: int = 99999,
-        reward_normalization: bool = False,  # can decrease final perf
-        deterministic_eval: bool = True,
-        action_scaling: bool = True,
-        action_bound_method: str = "clip",
-        lr_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None
+        env: gym.Env,  # 用于训练和评估智能体的环境
+        logger: BaseLogger = BaseLogger(),  # 日志记录器实例
+        cost_limit: float = 10,  # 拉格朗日优化的约束限制
+        device: str = "cpu",  # 用于训练和推理的设备
+        thread: int = 4,  # 如果使用"cpu"进行训练
+        seed: int = 10,  # 用于可重现性的随机种子
+        lr: float = 5e-4,  # 学习率
+        hidden_sizes: Tuple[int, ...] = (128, 128),  # 隐藏层大小
+        unbounded: bool = False,  # 动作空间是否无界
+        last_layer_scale: bool = False,  # 是否缩放策略网络的最后一层输出
+        # PPO特定参数
+        target_kl: float = 0.02,  # PPO更新的目标KL散度
+        vf_coef: float = 0.25,  # 损失函数的价值函数系数
+        max_grad_norm: Optional[float] = None,  # 梯度裁剪的最大梯度范数
+        gae_lambda: float = 0.95,  # GAE参数
+        eps_clip: float = 0.2,  # PPO裁剪参数
+        dual_clip: Optional[float] = None,  # PPO双裁剪参数
+        value_clip: bool = False,  # 是否裁剪价值函数更新
+        advantage_normalization: bool = True,  # 是否归一化优势
+        recompute_advantage: bool = False,  # 是否重新计算优势
+        # 拉格朗日特定参数
+        use_lagrangian: bool = True,  # 是否使用拉格朗日约束优化
+        lagrangian_pid: Tuple = (0.05, 0.0005, 0.1),  # PID系数
+        rescaling: bool = True,  # 是否使用重缩放技巧
+        # 基础策略通用参数
+        gamma: float = 0.99,  # 未来奖励的折扣因子
+        max_batchsize: int = 99999,  # 计算GAE时的最大批次大小
+        reward_normalization: bool = False,  # 是否归一化奖励(可能降低最终性能)
+        deterministic_eval: bool = True,  # 评估时是否使用确定性动作
+        action_scaling: bool = True,  # 是否根据动作空间缩放动作
+        action_bound_method: str = "clip",  # 处理超界动作的方法
+        lr_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None  # 学习率调度器
     ) -> None:
         super().__init__()
 
@@ -124,11 +64,11 @@ class PPOLagAgent(OnpolicyAgent):
         else:
             cost_dim = len(cost_limit)
 
-        # set seed and computing
+        # 设置种子和计算
         seed_all(seed)
         torch.set_num_threads(thread)
 
-        # model
+        # 模型
         state_shape = env.observation_space.shape or env.observation_space.n
         action_shape = env.action_space.shape or env.action_space.n
         max_action = env.action_space.high[0]
@@ -146,23 +86,23 @@ class PPOLagAgent(OnpolicyAgent):
 
         torch.nn.init.constant_(actor.sigma_param, -0.5)
         actor_critic = ActorCritic(actor, critic)
-        # orthogonal initialization
+        # 正交初始化
         for m in actor_critic.modules():
             if isinstance(m, torch.nn.Linear):
                 torch.nn.init.orthogonal_(m.weight)
                 torch.nn.init.zeros_(m.bias)
         if last_layer_scale:
-            # do last policy layer scaling, this will make initial actions have (close
-            # to) 0 mean and std, and will help boost performances, see
-            # https://arxiv.org/abs/2006.05990, Fig.24 for details
+            # 进行最后的策略层缩放，这将使初始动作具有（接近于）0均值和标准差，
+            # 有助于提升性能，详见
+            # https://arxiv.org/abs/2006.05990，图24
             for m in actor.mu.modules():
                 if isinstance(m, torch.nn.Linear):
                     torch.nn.init.zeros_(m.bias)
                     m.weight.data.copy_(0.01 * m.weight.data)
         optim = torch.optim.Adam(actor_critic.parameters(), lr=lr)
 
-        # replace DiagGuassian with Independent(Normal) which is equivalent pass *logits
-        # to be consistent with policy.forward
+        # 用Independent(Normal)替换DiagGuassian，它们是等价的
+        # 传递*logits以保持与policy.forward一致
         def dist(*logits):
             return Independent(Normal(*logits), 1)
 
@@ -172,7 +112,7 @@ class PPOLagAgent(OnpolicyAgent):
             optim,
             dist,
             logger=logger,
-            # PPO specific arguments
+            # PPO特定参数
             target_kl=target_kl,
             vf_coef=vf_coef,
             max_grad_norm=max_grad_norm,
@@ -182,12 +122,12 @@ class PPOLagAgent(OnpolicyAgent):
             value_clip=value_clip,
             advantage_normalization=advantage_normalization,
             recompute_advantage=recompute_advantage,
-            # Lagrangian specific arguments
+            # 拉格朗日特定参数
             use_lagrangian=use_lagrangian,
             lagrangian_pid=lagrangian_pid,
             cost_limit=cost_limit,
             rescaling=rescaling,
-            # Base policy common arguments
+            # 基础策略通用参数
             gamma=gamma,
             max_batchsize=max_batchsize,
             reward_normalization=reward_normalization,

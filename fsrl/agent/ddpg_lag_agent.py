@@ -16,90 +16,47 @@ from fsrl.utils.net.common import ActorCritic
 
 
 class DDPGLagAgent(OffpolicyAgent):
-    """Deep Deterministic Policy Gradient (DDPG) with PID Lagrangian agent.
-
-    More details, please refer to https://arxiv.org/abs/1509.02971 (DDPG) and
-    https://arxiv.org/abs/2007.03964 (PID Lagrangian).
-
-    :param gym.Env env: The environment to train and evaluate the agent on.
-    :param BaseLogger logger: A logger instance to log training and evaluation
-        statistics, default to a dummy logger.
-    :param float cost_limit: The maximum constraint cost allowed, default to 10.
-    :param str device: The device to use for training and inference, default to "cpu".
-    :param int thread: The number of threads to use for training, ignored if `device` is
-        "cuda", default to 4.
-    :param int seed: The random seed for reproducibility, default to 10.
-    :param float actor_lr: The learning rate of the actor network (default is 5e-4).
-    :param float critic_lr: The learning rate of the critic network (default is 1e-3).
-    :param Tuple[int, ...] hidden_sizes: The sizes of the hidden layers in the actor and
-        critic networks (default is (128, 128)).
-    :param float tau: the soft update coefficient for updating target networks. Default
-        is 0.05.
-    :param Optional[BaseNoise] exploration_noise: the noise instance for exploration.
-        Default is GaussianNoise(sigma=0.1).
-    :param int n_step: the number of steps for multi-step bootstrap targets. Default is
-        2.
-    :param bool use_lagrangian: whether to use the Lagrangian constraint optimization.
-        Default is True.
-    :param List lagrangian_pid: the PID coefficients for the Lagrangian constraint
-        optimization. Default is [0.05, 0.0005, 0.1].
-    :param bool rescaling: whether use the rescaling trick for Lagrangian multiplier, see
-        Alg. 1 in http://proceedings.mlr.press/v119/stooke20a/stooke20a.pdf
-    :param float gamma: the discount factor for future rewards. Default is 0.99.
-    :param bool deterministic_eval: whether to use deterministic action selection during
-        evaluation. Default is True.
-    :param bool action_scaling: whether to scale the actions according to the action
-        space bounds. Default is True.
-    :param str action_bound_method: the method for handling actions that exceed the
-        action space bounds ("clip" or other custom methods). Default is "clip".
-    :param Optional[torch.optim.lr_scheduler.LambdaLR] lr_scheduler: learning rate
-        scheduler for the optimizer. Default is None.
-
-    .. seealso::
-
-        Please refer to :class:`~fsrl.agent.BaseAgent` and
-        :class:`~fsrl.agent.OffpolicyAgent` for more details of usage.
-    """
+    """带PID拉格朗日的深度确定性策略梯度（DDPG）智能体。"""
 
     name = "DDPGLagAgent"
 
     def __init__(
         self,
-        env: gym.Env,
-        logger: BaseLogger = BaseLogger(),
-        # general task params
-        cost_limit: float = 10,
-        device: str = "cpu",
-        thread: int = 4,  # if use "cpu" to train
-        seed: int = 10,
-        # algorithm params
-        actor_lr: float = 1e-4,
-        critic_lr: float = 1e-3,
-        hidden_sizes: Tuple[int, ...] = (128, 128),
-        tau: float = 0.005,
-        exploration_noise: float = 0.1,
-        n_step: int = 3,
-        # Lagrangian specific arguments
-        use_lagrangian: bool = True,
-        lagrangian_pid: Tuple[float, ...] = (0.5, 0.001, 0.1),
-        rescaling: bool = True,
-        # Base policy common arguments
-        gamma: float = 0.99,
-        deterministic_eval: bool = True,
-        action_scaling: bool = True,
-        action_bound_method: str = "clip",
-        lr_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None,
+        env: gym.Env,  # 用于训练和评估智能体的环境
+        logger: BaseLogger = BaseLogger(),  # 日志记录器实例
+        # 通用任务参数
+        cost_limit: float = 10,  # 允许的最大约束成本
+        device: str = "cpu",  # 用于训练和推理的设备
+        thread: int = 4,  # 如果使用"cpu"进行训练
+        seed: int = 10,  # 用于可重现性的随机种子
+        # 算法参数
+        actor_lr: float = 1e-4,  # 演员网络的学习率
+        critic_lr: float = 1e-3,  # 评论家网络的学习率
+        hidden_sizes: Tuple[int, ...] = (128, 128),  # 隐藏层大小
+        tau: float = 0.005,  # 更新目标网络的软更新系数
+        exploration_noise: float = 0.1,  # 用于探索的噪声
+        n_step: int = 3,  # 多步自举目标的步数
+        # 拉格朗日特定参数
+        use_lagrangian: bool = True,  # 是否使用拉格朗日约束优化
+        lagrangian_pid: Tuple[float, ...] = (0.5, 0.001, 0.1),  # PID系数
+        rescaling: bool = True,  # 是否使用重缩放技巧
+        # 基础策略通用参数
+        gamma: float = 0.99,  # 未来奖励的折扣因子
+        deterministic_eval: bool = True,  # 评估时是否使用确定性动作选择
+        action_scaling: bool = True,  # 是否根据动作空间边界缩放动作
+        action_bound_method: str = "clip",  # 处理超界动作的方法
+        lr_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None  # 学习率调度器
     ) -> None:
         super().__init__()
 
         self.logger = logger
         self.cost_limit = cost_limit
 
-        # set seed and computing
+        # 设置种子和计算
         seed_all(seed)
         torch.set_num_threads(thread)
 
-        # model
+        # 模型
         state_shape = env.observation_space.shape or env.observation_space.n
         action_shape = env.action_space.shape or env.action_space.n
         max_action = env.action_space.high[0]
@@ -126,7 +83,7 @@ class DDPGLagAgent(OffpolicyAgent):
         critic_optim = torch.optim.Adam(nn.ModuleList(critic).parameters(), lr=critic_lr)
 
         actor_critic = ActorCritic(actor, critic)
-        # orthogonal initialization
+        # 正交初始化
         for m in actor_critic.modules():
             if isinstance(m, torch.nn.Linear):
                 torch.nn.init.orthogonal_(m.weight)

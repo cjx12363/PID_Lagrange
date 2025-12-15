@@ -1,4 +1,4 @@
-"""Data package."""
+"""数据包。"""
 # isort:skip_file
 
 from fsrl.data.fast_collector import FastCollector

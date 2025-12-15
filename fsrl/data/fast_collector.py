@@ -18,39 +18,18 @@ from fsrl.policy import BasePolicy
 
 
 class FastCollector(object):
-    """Collector enables the policy to interact with different types of envs with \
-    exact number of episodes.
+    """收集器使策略能够与不同类型的环境进行准确数量的episode交互。
 
-    This collector is a simplified version of Tianshou's `collector
-    <https://tianshou.readthedocs.io/en/master/api/tianshou.data.html#collector>`_, so
-    it is safe to check their documentation for details. The main change is the \
-        support to extract the cost signals from the interaction data.
-
-    :param policy: an instance of the :class:`~fsrl.policy.BasePolicy` class.
-    :param env: a ``gym.Env`` environment or an instance of the
-        :class:`~tianshou.env.BaseVectorEnv` class.
-    :param buffer: an instance of the :class:`~tianshou.data.ReplayBuffer` class. If set
-        to None, it will not store the data. Default to None.
-    :param function preprocess_fn: a function called before the data has been added to
-        the buffer. Default to None.
-    :param bool exploration_noise: determine whether the action needs to be modified with
-        corresponding policy's exploration noise. If so, "policy. exploration_noise(act,
-        batch)" will be called automatically to add the exploration noise into action.
-        Default to False.
-
-    .. note::
-
-        Please make sure the given environment has a time limitation (can be done), \
-            because we only support the `n_episode` collect option.
+    这是Tianshou收集器的简化版本，主要变化是支持从交互数据中提取成本信号。
     """
 
     def __init__(
         self,
-        policy: BasePolicy,
-        env: Union[gym.Env, BaseVectorEnv],
-        buffer: Optional[ReplayBuffer] = None,
-        preprocess_fn: Optional[Callable[..., Batch]] = None,
-        exploration_noise: bool = False,
+        policy: BasePolicy,  # 策略实例
+        env: Union[gym.Env, BaseVectorEnv],  # 环境
+        buffer: Optional[ReplayBuffer] = None,  # 重放缓冲区
+        preprocess_fn: Optional[Callable[..., Batch]] = None,  # 预处理函数
+        exploration_noise: bool = False,  # 是否添加探索噪声
     ) -> None:
         super().__init__()
         if isinstance(env, gym.Env) and not hasattr(env, "__len__"):
@@ -64,11 +43,11 @@ class FastCollector(object):
         self.policy = policy
         self.preprocess_fn = preprocess_fn
         self._action_space = self.env.action_space
-        # avoid creating attribute outside __init__
+        # 避免在__init__外部创建属性
         self.reset(False)
 
     def _assign_buffer(self, buffer: Optional[ReplayBuffer]) -> None:
-        """Check if the buffer matches the constraint."""
+        """检查缓冲区是否符合约束。"""
         if buffer is None:
             buffer = VectorReplayBuffer(self.env_num, self.env_num)
         elif isinstance(buffer, ReplayBufferManager):
@@ -94,15 +73,9 @@ class FastCollector(object):
         reset_buffer: bool = True,
         gym_reset_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Reset the environment, statistics, current data and possibly replay memory.
-
-        :param bool reset_buffer: if true, reset the replay buffer that is attached to
-            the collector.
-        :param gym_reset_kwargs: extra keyword arguments to pass into the environment's
-            reset function. Defaults to None (extra keyword arguments)
-        """
-        # use empty Batch for "state" so that self.data supports slicing convert empty
-        # Batch to None when passing data to policy
+        """重置环境、统计信息、当前数据和重放内存。"""
+        # 使用空Batch作为"state"，使self.data支持切片
+        # 将空Batch转换为None传递给策略
         self.data = Batch(
             obs={},
             act={},
@@ -121,15 +94,15 @@ class FastCollector(object):
         self.reset_stat()
 
     def reset_stat(self) -> None:
-        """Reset the statistic variables."""
+        """重置统计变量。"""
         self.collect_step, self.collect_episode, self.collect_time = 0, 0, 0.0
 
     def reset_buffer(self, keep_statistics: bool = False) -> None:
-        """Reset the data buffer."""
+        """重置数据缓冲区。"""
         self.buffer.reset(keep_statistics=keep_statistics)
 
     def reset_env(self, gym_reset_kwargs: Optional[Dict[str, Any]] = None) -> None:
-        """Reset all of the environments."""
+        """重置所有环境。"""
         gym_reset_kwargs = gym_reset_kwargs if gym_reset_kwargs else {}
         rval = self.env.reset(**gym_reset_kwargs)
         returns_info = isinstance(rval, (tuple, list)) and len(rval) == 2 and (
@@ -152,7 +125,7 @@ class FastCollector(object):
         self.data.obs = obs
 
     def _reset_state(self, id: Union[int, List[int]]) -> None:
-        """Reset the hidden state: self.data.state[id]."""
+        """重置隐藏状态。"""
         if hasattr(self.data.policy, "hidden_state"):
             state = self.data.policy.hidden_state  # it is a reference
             if isinstance(state, torch.Tensor):
@@ -197,39 +170,7 @@ class FastCollector(object):
         no_grad: bool = True,
         gym_reset_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Collect a specified number of step or episode.
-
-        To ensure unbiased sampling result with n_episode option, this function will
-        first collect ``n_episode - env_num`` episodes, then for the last ``env_num``
-        episodes, they will be collected evenly from each env.
-
-        :param int n_episode: how many episodes you want to collect.
-        :param bool random: whether to use random policy for collecting data. Default to
-            False.
-        :param bool render: Whether to render the environment during evaluation, defaults
-            to False
-        :param bool no_grad: whether to retain gradient in policy.forward(). Default to
-            True (no gradient retaining).
-        :param gym_reset_kwargs: extra keyword arguments to pass into the environment's
-            reset function. Defaults to None (extra keyword arguments)
-
-        .. note::
-
-            We don not support the `n_step` collection method in Tianshou, because using
-            `n_episode` only can facilitate the episodic cost computation and better
-            evaluate the agent.
-
-        :return: A dict including the following keys
-
-            * ``n/ep`` collected number of episodes.
-            * ``n/st`` collected number of steps.
-            * ``rew`` mean of episodic rewards.
-            * ``len`` mean of episodic lengths.
-            * ``total_cost`` cumulative costs in this collect.
-            * ``cost`` mean of episodic costs.
-            * ``truncated`` mean of episodic truncation.
-            * ``terminated`` mean of episodic termination.
-        """
+        """收集指定数量的episode。"""
         if n_episode is not None:
             assert n_episode > 0
             ready_env_ids = np.arange(min(self.env_num, n_episode))
@@ -251,38 +192,38 @@ class FastCollector(object):
 
         while True:
             assert len(self.data) == len(ready_env_ids)
-            # restore the state: if the last state is None, it won't store
+            # 恢复状态：如果最后一个状态是None，它不会存储
             last_state = self.data.policy.pop("hidden_state", None)
 
-            # get the next action
+            # 获取下一个动作
             if random:
                 try:
                     act_sample = [self._action_space[i].sample() for i in ready_env_ids]
-                except TypeError:  # envpool's action space is not for per-env
+                except TypeError:  # envpool的动作空间不是每环境的
                     act_sample = [self._action_space.sample() for _ in ready_env_ids]
                 act_sample = self.policy.map_action_inverse(act_sample)  # type: ignore
                 self.data.update(act=act_sample)
             else:
                 if no_grad:
-                    with torch.no_grad():  # faster than retain_grad version
-                        # self.data.obs will be used by agent to get result
+                    with torch.no_grad():  # 比retain_grad版本更快
+                        # self.data.obs将被智能体用来获取结果
                         result = self.policy(self.data, last_state)
                 else:
                     result = self.policy(self.data, last_state)
-                # update state / act / policy into self.data
+                # 将state/act/policy更新到self.data
                 policy = result.get("policy", Batch())
                 assert isinstance(policy, Batch)
                 state = result.get("state", None)
                 if state is not None:
-                    policy.hidden_state = state  # save state into buffer
+                    policy.hidden_state = state  # 将状态保存到缓冲区
                 act = to_numpy(result.act)
                 if self.exploration_noise:
                     act = self.policy.exploration_noise(act, self.data)
                 self.data.update(policy=policy, act=act)
 
-            # get bounded and remapped actions first (not saved into buffer)
+            # 首先获取有界和重映射的动作（不保存到缓冲区）
             action_remap = self.policy.map_action(self.data.act)
-            # step in env
+            # 在环境中执行步骤
             result = self.env.step(action_remap, ready_env_ids)
             if len(result) == 5:
                 obs_next, rew, terminated, truncated, info = result
@@ -329,12 +270,12 @@ class FastCollector(object):
             if render:
                 self.env.render()
 
-            # add data into the buffer
+            # 将数据添加到缓冲区
             ptr, ep_rew, ep_len, ep_idx = self.buffer.add(
                 self.data, buffer_ids=ready_env_ids
             )
 
-            # collect statistics
+            # 收集统计信息
             step_count += len(ready_env_ids)
 
             if np.any(done):
@@ -346,14 +287,13 @@ class FastCollector(object):
                 episode_start_indices.append(ep_idx[env_ind_local])
                 termination_count += np.sum(terminated)
                 truncation_count += np.sum(truncated)
-                # now we copy obs_next to obs, but since there might be finished
-                # episodes, we have to reset finished envs first.
+                # 现在将obs_next复制到obs，但由于可能有已完成的episode，
+                # 我们必须先重置已完成的环境
                 self._reset_env_with_ids(env_ind_local, env_ind_global, gym_reset_kwargs)
                 for i in env_ind_local:
                     self._reset_state(i)
 
-                # remove surplus env id from ready_env_ids to avoid bias in selecting
-                # environments
+                # 从 ready_env_ids中删除多余的环境id以避免选择环境时的偏差
                 if n_episode:
                     surplus_env_num = len(ready_env_ids) - (n_episode - episode_count)
                     if surplus_env_num > 0:
@@ -367,7 +307,7 @@ class FastCollector(object):
             if n_episode and episode_count >= n_episode:
                 break
 
-        # generate statistics
+        # 生成统计信息
         self.collect_step += step_count
         self.collect_episode += episode_count
         self.collect_time += max(time.time() - start_time, 1e-9)

@@ -12,28 +12,28 @@ from fsrl.utils import BaseLogger
 
 
 class BaseAgent(ABC):
-    """The base class for a default agent.
+    """默认智能体的基类。
 
-    A agent class should have the following parts:
+    一个智能体类应该包含以下部分：
 
-    * :meth:`~fsrl.agent.BaseAgent.__init__`: initialize the agent, including the policy,
-        networks, optimizers, and so on;
-    * :meth:`~fsrl.agent.BaseAgent.learn`: start training given the learning parameters;
-    * :meth:`~fsrl.agent.BaseAgent.evaluate`: evaluate the agent multiple episodes;
-    * :attr:`~fsrl.agent.BaseAgent.state_dict`: the agent state dictionary that can be
-        saved as checkpoints;
+    * :meth:`~fsrl.agent.BaseAgent.__init__`: 初始化智能体，包括策略、
+        网络、优化器等；
+    * :meth:`~fsrl.agent.BaseAgent.learn`: 根据给定的学习参数开始训练；
+    * :meth:`~fsrl.agent.BaseAgent.evaluate`: 在多个回合中评估智能体；
+    * :attr:`~fsrl.agent.BaseAgent.state_dict`: 智能体状态字典，可以
+        保存为检查点；
 
-    Example of usage: ::
+    使用示例：::
 
-        # initialize the CVPO agent
-        agent = CVPOAgent(env, other_algo_params) # train multiple epochs
+        # 初始化CVPO智能体
+        agent = CVPOAgent(env, other_algo_params) # 训练多个epoch
         agent.learn(training_envs, other_training_params)
 
-        # test after the training is finished agent.eval(testing_envs)
+        # 训练完成后测试 agent.eval(testing_envs)
 
-        # test with agent's state_dict agent.eval(testing_envs, agent.state_dict)
+        # 使用智能体的state_dict测试 agent.eval(testing_envs, agent.state_dict)
 
-    All of the agent classes must inherit :class:`~fsrl.agent.BaseAgent`.
+    所有智能体类都必须继承 :class:`~fsrl.agent.BaseAgent`。
     """
 
     name = "BaseAgent"
@@ -47,7 +47,7 @@ class BaseAgent(ABC):
 
     @abstractmethod
     def learn(self, *args, **kwargs) -> None:
-        """Train the policy on a set of training environments."""
+        """在一组训练环境上训练策略。"""
         raise NotImplementedError
 
     def evaluate(
@@ -58,19 +58,17 @@ class BaseAgent(ABC):
         render: bool = False,
         train_mode: bool = False
     ) -> Tuple[float, float, float]:
-        """Evaluate the policy on a set of test environments.
+        """在一组测试环境上评估策略。
 
-        :param Union[gym.Env, BaseVectorEnv] test_envs: A single environment or a
-            vectorized environment to evaluate the policy on.
-        :param Optional[dict] state_dict: An optional dictionary containing the state
-             params of the agent to be evaluated., defaults to None
-        :param int eval_episodes: The number of episodes to evaluate, defaults to 10
-        :param bool render: Whether to render the environment during evaluation, defaults
-            to False
-        :param bool train_mode: Whether to set the policy to training mode during
-            evaluation, defaults to False
-        :return Tuple: rewards, episode lengths, and constraint costs obtained during
-            evaluation.
+        :param Union[gym.Env, BaseVectorEnv] test_envs: 用于评估策略的单个环境或
+            向量化环境。
+        :param Optional[dict] state_dict: 包含要评估的智能体状态参数的可选字典，
+             默认为None
+        :param int eval_episodes: 要评估的回合数，默认为10
+        :param bool render: 评估期间是否渲染环境，默认为False
+        :param bool train_mode: 评估期间是否将策略设置为训练模式，
+            默认为False
+        :return Tuple: 评估期间获得的奖励、回合长度和约束成本。
         """
         if state_dict is not None:
             self.policy.load_state_dict(state_dict)
@@ -82,22 +80,22 @@ class BaseAgent(ABC):
         eval_collector = FastCollector(self.policy, test_envs)
         result = eval_collector.collect(n_episode=eval_episodes, render=render)
         rews, lens, cost = result["rew"], result["len"], result["cost"]
-        # term, trun = result["terminated"], result["truncated"] print(f"Termination:
-        # {term}, truncation: {trun}") print(f"Eval reward: {rews.mean()}, cost: {cost},
-        # length: {lens.mean()}")
+        # term, trun = result["terminated"], result["truncated"] print(f"终止:
+        # {term}, 截断: {trun}") print(f"评估奖励: {rews.mean()}, 成本: {cost},
+        # 长度: {lens.mean()}")
         return rews, lens, cost
 
     @property
     def state_dict(self):
-        """Return the policy's state_dict."""
+        """返回策略的state_dict。"""
         return self.policy.state_dict()
 
 
 class OffpolicyAgent(BaseAgent):
-    """The base class for an off-policy agent.
+    """离线策略智能体的基类。
 
-    The :meth:`~srl.agent.OffpolicyAgent.learn`: function is customized to work with the
-    off-policy trainer. See :class:`~fsrl.agent.BaseAgent` for more details.
+    :meth:`~srl.agent.OffpolicyAgent.learn`: 函数经过定制以与
+    离线策略训练器配合工作。更多详细信息请参见 :class:`~fsrl.agent.BaseAgent`。
     """
 
     name = "OffpolicyAgent"
@@ -123,40 +121,40 @@ class OffpolicyAgent(BaseAgent):
         verbose: bool = True,
         show_progress: bool = True
     ) -> None:
-        """Train the policy on a set of training environments.
+        """在一组训练环境上训练策略。
 
-        :param Union[gym.Env, BaseVectorEnv] train_envs: A single environment or a
-            vectorized environment to train the policy on.
-        :param Union[gym.Env, BaseVectorEnv] test_envs: A single environment or a
-            vectorized environment to evaluate the policy on, default to None.
-        :param int epoch: The number of training epochs, defaults to 300.
-        :param int episode_per_collect: The number of episodes to collect before each
-            policy update, defaults to 5.
-        :param int step_per_epoch: The number of environment steps per epoch, defaults to
-            3000.
-        :param float update_per_step: The ratio of policy updates to environment steps, \
-            defaults to 0.1.
-        :param int buffer_size: The maximum size of the replay buffer, defaults to
-            100000.
-        :param int testing_num: The number of episodes to use for evaluation, defaults to
-            2.
-        :param int batch_size: The batch size for each policy update, defaults to 256.
-        :param float reward_threshold: The reward threshold for early stopping, \
-            defaults to 450.
-        :param int save_interval: The interval (in epochs) for saving the policy model,
-            defaults to 4.
-        :param bool resume: Whether to resume training from the last checkpoint, defaults
-            to False.
-        :param bool save_ckpt: Whether to save the policy model, defaults to True.
-        :param bool verbose: Whether to print progress information during training,
-            defaults to True.
-        :param bool show_progress: Whether to show the tqdm training progress bar,
-            defaults to True
+        :param Union[gym.Env, BaseVectorEnv] train_envs: 用于训练策略的单个环境或
+            向量化环境。
+        :param Union[gym.Env, BaseVectorEnv] test_envs: 用于评估策略的单个环境或
+            向量化环境，默认为None。
+        :param int epoch: 训练epoch数，默认为300。
+        :param int episode_per_collect: 每次策略更新前收集的回合数，
+            默认为5。
+        :param int step_per_epoch: 每个epoch的环境步数，默认为
+            3000。
+        :param float update_per_step: 策略更新与环境步数的比率，\
+            默认为0.1。
+        :param int buffer_size: 重放缓冲区的最大大小，默认为
+            100000。
+        :param int testing_num: 用于评估的回合数，默认为
+            2。
+        :param int batch_size: 每次策略更新的批次大小，默认为256。
+        :param float reward_threshold: 提前停止的奖励阈值，\
+            默认为450。
+        :param int save_interval: 保存策略模型的间隔（以epoch为单位），
+            默认为4。
+        :param bool resume: 是否从上一个检查点恢复训练，默认为
+            False。
+        :param bool save_ckpt: 是否保存策略模型，默认为True。
+        :param bool verbose: 是否在训练期间打印进度信息，
+            默认为True。
+        :param bool show_progress: 是否显示tqdm训练进度条，
+            默认为True
         """
-        assert self.policy is not None, "The policy is not initialized"
-        # set policy to train mode
+        assert self.policy is not None, "策略未初始化"
+        # 将策略设置为训练模式
         self.policy.train()
-        # collector
+        # 收集器
         if isinstance(train_envs, gym.Env):
             buffer = ReplayBuffer(buffer_size)
         else:
@@ -181,7 +179,7 @@ class OffpolicyAgent(BaseAgent):
         if save_ckpt:
             self.logger.setup_checkpoint_fn(checkpoint_fn)
 
-        # trainer
+        # 训练器
         trainer = OffpolicyTrainer(
             policy=self.policy,
             train_collector=train_collector,
@@ -210,11 +208,11 @@ class OffpolicyAgent(BaseAgent):
 
 
 class OnpolicyAgent(BaseAgent):
-    """The base class for an on-policy agent.
+    """在线策略智能体的基类。
 
-    The :meth:`~srl.agent.OnpolicyAgent.learn`: function is customized to work with the \
-        on-policy trainer.
-    See :class:`~fsrl.agent.BaseAgent` for more details.
+    :meth:`~srl.agent.OnpolicyAgent.learn`: 函数经过定制以与\
+        在线策略训练器配合工作。
+    更多详细信息请参见 :class:`~fsrl.agent.BaseAgent`。
     """
 
     name = "OnpolicyAgent"
@@ -240,39 +238,39 @@ class OnpolicyAgent(BaseAgent):
         verbose: bool = True,
         show_progress: bool = True
     ) -> None:
-        """Train the policy on a set of training environments.
+        """在一组训练环境上训练策略。
 
-        :param Union[gym.Env, BaseVectorEnv] train_envs: A single environment or a
-            vectorized environment to train the policy on.
-        :param Union[gym.Env, BaseVectorEnv] test_envs: A single environment or a
-            vectorized environment to evaluate the policy on, defaults to None.
-        :param int epoch: The number of training epochs, defaults to 300
-        :param int episode_per_collect: The number of episodes collected per data
-            collection, defaults to 20
-        :param int step_per_epoch: The number of steps per training epoch, defaults to
+        :param Union[gym.Env, BaseVectorEnv] train_envs: 用于训练策略的单个环境或
+            向量化环境。
+        :param Union[gym.Env, BaseVectorEnv] test_envs: 用于评估策略的单个环境或
+            向量化环境，默认为None。
+        :param int epoch: 训练epoch数，默认为300
+        :param int episode_per_collect: 每次数据收集的回合数，
+            默认为20
+        :param int step_per_epoch: 每个训练epoch的步数，默认为
             10000
-        :param int repeat_per_collect: The number of repeats of policy update for one
-            episode collection, defaults to 4
-        :param int buffer_size: The size of the replay buffer, defaults to 100000
-        :param int testing_num: The number of episodes to evaluate during testing,
-            defaults to 2
-        :param int batch_size: The batch size for training, default is 99999 for
-            :class:`~fsrl.agent.TRPOLagAgent` :class:`~fsrl.agent.CPOLagAgent`, and is
-            512 for others
-        :param float reward_threshold: The threshold for stopping training when the mean
-            reward exceeds it, defaults to 450
-        :param int save_interval: The number of epochs to save the policy, defaults to 4
-        :param bool resume: Whether to resume training from the saved checkpoint,
-            defaults to False
-        :param bool save_ckpt: Whether to save the policy model, defaults to True
-        :param bool verbose: Whether to print the training information, defaults to True
-        :param bool show_progress: Whether to show the tqdm training progress bar,
-            defaults to True
+        :param int repeat_per_collect: 一个回合收集的策略更新重复次数，
+            默认为4
+        :param int buffer_size: 重放缓冲区的大小，默认为100000
+        :param int testing_num: 测试期间评估的回合数，
+            默认为2
+        :param int batch_size: 训练的批次大小，对于
+            :class:`~fsrl.agent.TRPOLagAgent` :class:`~fsrl.agent.CPOLagAgent` 默认为99999，
+            对于其他为512
+        :param float reward_threshold: 当平均奖励超过此阈值时停止训练的阈值，
+            默认为450
+        :param int save_interval: 保存策略的epoch数，默认为4
+        :param bool resume: 是否从保存的检查点恢复训练，
+            默认为False
+        :param bool save_ckpt: 是否保存策略模型，默认为True
+        :param bool verbose: 是否打印训练信息，默认为True
+        :param bool show_progress: 是否显示tqdm训练进度条，
+            默认为True
         """
-        assert self.policy is not None, "The policy is not initialized"
-        # set policy to train mode
+        assert self.policy is not None, "策略未初始化"
+        # 将策略设置为训练模式
         self.policy.train()
-        # collector
+        # 收集器
         if isinstance(train_envs, gym.Env):
             buffer = ReplayBuffer(buffer_size)
         else:
@@ -296,7 +294,7 @@ class OnpolicyAgent(BaseAgent):
         if save_ckpt:
             self.logger.setup_checkpoint_fn(checkpoint_fn)
 
-        # trainer
+        # 训练器
         trainer = OnpolicyTrainer(
             policy=self.policy,
             train_collector=train_collector,

@@ -16,112 +16,55 @@ from fsrl.utils.net.common import ActorCritic
 
 
 class FOCOPSAgent(OnpolicyAgent):
-    """First Order Constrained Optimization in Policy Space (FOCOPS) agent.
-
-    More details, please refer to https://arxiv.org/pdf/2002.06506.pdf
-
-    :param gym.Env env: The environment to train and evaluate the agent on.
-    :param BaseLogger logger: A logger instance to log training and evaluation
-        statistics, default to a dummy logger.
-    :param float cost_limit: the constraint threshold. Default value is 10.
-    :param str device: The device to use for training and inference, default to "cpu".
-    :param int thread: The number of threads to use for training, ignored if `device` is
-        "cuda", default to 4.
-    :param int seed: The random seed for reproducibility, default to 10.
-    :param float actor_lr: the learning rate of the actor network, default to 5e-4.
-    :param float critic_lr: the learning rate of the critic network, default to 1e-3.
-    :param Tuple[int, ...] hidden_sizes: The sizes of the hidden layers for the policy
-        and value networks, default to (128, 128).
-    :param bool unbounded: Whether the action space is unbounded, default to False.
-    :param bool last_layer_scale: whether to scale the last layer output for the policy
-        network, default to False.
-    :param bool auto_nu: whether to automatically tune "nu", the cost coefficient.
-        Default value is True.
-    :param Union[float, Tuple[float, float, torch.Tensor]] nu: cost coefficient. It can
-        also be a tuple representing [nu_max, nu_lr, nu]. Default value is 0.01.
-    :param float nu_max: the max value of the cost coefficient if ``auto_nu`` is True.
-        Default value is 2.
-    :param float nu_lr: the learning rate of nu if ``auto_nu`` is True. Default value is
-        0.01.
-    :param float l2_reg: L2 regularization rate. Default value is 1e-3.
-    :param float delta: early stop KL bound. Default value is 0.02.
-    :param float eta: KL bound for indicator function. Default value is 0.02.
-    :param float tem_lambda: inverse temperature lambda. Default value is 0.95.
-    :param float gae_lambda: GAE (Generalized Advantage Estimation) lambda for advantage
-        computation. Default value is 0.95.
-    :param Optional[float] max_grad_norm: maximum gradient norm for gradient clipping, if
-        specified. Default value is 0.5.
-    :param bool advantage_normalization: normalize advantage if True. Default value is
-        True.
-    :param bool recompute_advantage: recompute advantage using the updated value
-        function. Default value is False.
-    :param float gamma: the discount factor for future rewards. Default value is 0.99.
-    :param int max_batchsize: maximum batch size for the optimization. Default value is
-        99999.
-    :param bool reward_normalization: normalize the rewards if True. Default value is
-        False.
-    :param bool deterministic_eval: whether to use deterministic action selection during
-        evaluation. Default value is True.
-    :param bool action_scaling: whether to scale the actions according to the action
-        space bounds. Default value is True.
-    :param str action_bound_method: the method for handling actions that exceed the
-        action space bounds ("clip" or other custom methods). Default value is "clip".
-    :param Optional[torch.optim.lr_scheduler.LambdaLR] lr_scheduler: learning rate
-        scheduler for the optimizer. Default value is None.
-
-    .. seealso::
-
-        Please refer to :class:`~fsrl.agent.BaseAgent` and
-        :class:`~fsrl.agent.OnpolicyAgent` for more details of usage.
-    """
+    """策略空间一阶约束优化（FOCOPS）智能体。"""
 
     name = "FOCOPSAgent"
 
     def __init__(
         self,
-        env: gym.Env,
-        logger: BaseLogger = BaseLogger(),
-        cost_limit: float = 10,
-        device: str = "cpu",
-        thread: int = 4,  # if use "cpu" to train
-        seed: int = 10,
-        actor_lr: float = 5e-4,
-        critic_lr: float = 1e-3,
-        hidden_sizes: Tuple[int, ...] = (128, 128),
-        unbounded: bool = False,
-        last_layer_scale: bool = False,
-        # FOCOPS specific arguments
-        auto_nu: bool = True,
-        nu: float = 0.01,
-        nu_max: float = 2.0,
-        nu_lr: float = 1e-2,
-        l2_reg: float = 1e-3,
-        delta: float = 0.02,
-        eta: float = 0.02,
-        tem_lambda: float = 0.95,
-        gae_lambda: float = 0.95,
-        max_grad_norm: Optional[float] = 0.5,
-        advantage_normalization: bool = True,
-        recompute_advantage: bool = False,
-        # Base policy common arguments
-        gamma: float = 0.99,
-        max_batchsize: int = 100000,
-        reward_normalization: bool = False,  # can decrease final perf
-        deterministic_eval: bool = True,
-        action_scaling: bool = True,
-        action_bound_method: str = "clip",
-        lr_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None
+        env: gym.Env,  # 用于训练和评估智能体的环境
+        logger: BaseLogger = BaseLogger(),  # 日志记录器实例
+        cost_limit: float = 10,  # 约束阈值
+        device: str = "cpu",  # 用于训练和推理的设备
+        thread: int = 4,  # 如果使用"cpu"进行训练
+        seed: int = 10,  # 用于可重现性的随机种子
+        actor_lr: float = 5e-4,  # 演员网络的学习率
+        critic_lr: float = 1e-3,  # 评论家网络的学习率
+        hidden_sizes: Tuple[int, ...] = (128, 128),  # 隐藏层大小
+        unbounded: bool = False,  # 动作空间是否无界
+        last_layer_scale: bool = False,  # 是否缩放策略网络的最后一层输出
+        # FOCOPS特定参数
+        auto_nu: bool = True,  # 是否自动调整nu(成本系数)
+        nu: float = 0.01,  # 成本系数
+        nu_max: float = 2.0,  # nu的最大值(如果auto_nu为True)
+        nu_lr: float = 1e-2,  # nu的学习率(如果auto_nu为True)
+        l2_reg: float = 1e-3,  # L2正则化率
+        delta: float = 0.02,  # 提前停止KL界
+        eta: float = 0.02,  # 指示函数的KL界
+        tem_lambda: float = 0.95,  # 逆温度lambda
+        gae_lambda: float = 0.95,  # GAE lambda
+        max_grad_norm: Optional[float] = 0.5,  # 梯度裁剪的最大梯度范数
+        advantage_normalization: bool = True,  # 是否归一化优势
+        recompute_advantage: bool = False,  # 是否重新计算优势
+        # 基础策略通用参数
+        gamma: float = 0.99,  # 未来奖励的折扣因子
+        max_batchsize: int = 100000,  # 优化的最大批次大小
+        reward_normalization: bool = False,  # 是否归一化奖励(可能降低最终性能)
+        deterministic_eval: bool = True,  # 评估时是否使用确定性动作选择
+        action_scaling: bool = True,  # 是否根据动作空间边界缩放动作
+        action_bound_method: str = "clip",  # 处理超界动作的方法
+        lr_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None  # 学习率调度器
     ) -> None:
         super().__init__()
 
         self.logger = logger
         self.cost_limit = cost_limit
 
-        # set seed and computing
+        # 设置种子和计算
         seed_all(seed)
         torch.set_num_threads(thread)
 
-        # model
+        # 模型
         state_shape = env.observation_space.shape or env.observation_space.n
         action_shape = env.action_space.shape or env.action_space.n
         max_action = env.action_space.high[0]
@@ -145,23 +88,23 @@ class FOCOPSAgent(OnpolicyAgent):
 
         torch.nn.init.constant_(actor.sigma_param, -0.5)
         actor_critic = ActorCritic(actor, critic)
-        # orthogonal initialization
+        # 正交初始化
         for m in actor_critic.modules():
             if isinstance(m, torch.nn.Linear):
                 torch.nn.init.orthogonal_(m.weight)
                 torch.nn.init.zeros_(m.bias)
 
         if last_layer_scale:
-            # do last policy layer scaling, this will make initial actions have (close
-            # to) 0 mean and std, and will help boost performances, see
-            # https://arxiv.org/abs/2006.05990, Fig.24 for details
+            # 进行最后的策略层缩放，这将使初始动作具有（接近于）0均值和标准差，
+            # 有助于提升性能，详见
+            # https://arxiv.org/abs/2006.05990，图24
             for m in actor.mu.modules():
                 if isinstance(m, torch.nn.Linear):
                     torch.nn.init.zeros_(m.bias)
                     m.weight.data.copy_(0.01 * m.weight.data)
 
-        # replace DiagGuassian with Independent(Normal) which is equivalent pass *logits
-        # to be consistent with policy.forward
+        # 用Independent(Normal)替换DiagGuassian，它们是等价的
+        # 传递*logits以保持与policy.forward一致
         def dist(*logits):
             return Independent(Normal(*logits), 1)
 
