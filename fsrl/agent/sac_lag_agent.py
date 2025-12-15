@@ -16,93 +16,41 @@ from fsrl.utils.net.continuous import DoubleCritic
 
 
 class SACLagAgent(OffpolicyAgent):
-    """Soft Actor-Critic (SAC) with PID Lagrangian agent.
-
-    More details, please refer to https://arxiv.org/abs/1801.01290 (SAC) and
-    https://arxiv.org/abs/2007.03964 (PID Lagrangian).
-
-    :param gym.Env env: The environment to train and evaluate the agent on.
-    :param BaseLogger logger: A logger instance to log training and evaluation
-        statistics, default to a dummy logger.
-    :param float cost_limit: the constraint limit(s) for the Lagrangian optimization.
-        (default: 10)
-    :param str device: The device to use for training and inference, default to "cpu".
-    :param int thread: The number of threads to use for training, ignored if `device` is
-        "cuda", default to 4.
-    :param int seed: The random seed for reproducibility, default to 10.
-    :param float actor_lr: The learning rate of the actor network (default: 5e-4).
-    :param float critic_lr: The learning rate of the critic network (default: 1e-3).
-    :param Tuple[int, ...] hidden_sizes: The sizes of the hidden layers for the policy
-        and value networks, default to (128, 128).
-    :param bool auto_alpha: whether to automatically tune "alpha", the temperature.
-        (default: True)
-    :param float alpha_lr: the learning rate of learning "alpha" if ``auto_alpha`` is
-        True. (default: 3e-4)
-    :param float alpha: initial temperature for entropy regularization. (default: 0.005)
-    :param float tau: target smoothing coefficient for soft update of target networks.
-        (default: 0.05)
-    :param int n_step: number of steps for multi-step learning. (default: 2)
-    :param bool use_lagrangian: whether to use the Lagrangian constraint optimization.
-        (default: True)
-    :param List lagrangian_pid: the PID coefficients for the Lagrangian constraint
-        optimization. (default: [0.05, 0.0005, 0.1])
-    :param bool rescaling: whether use the rescaling trick for Lagrangian multiplier, see
-        Alg. 1 in http://proceedings.mlr.press/v119/stooke20a/stooke20a.pdf
-    :param float gamma: the discount factor for future rewards. (default: 0.99)
-    :param bool conditioned_sigma: Whether the variance of the Gaussian policy is
-        conditioned on the state (default: True).
-    :param bool unbounded: Whether the action space is unbounded. (default: False)
-    :param bool last_layer_scale: Whether to scale the last layer output for the policy
-        network. (default: False)
-    :param bool deterministic_eval: whether to use deterministic action selection during
-        evaluation. (default: True)
-    :param bool action_scaling: whether to scale the actions according to the action
-        space bounds. (default: True)
-    :param str action_bound_method: the method for handling actions that exceed the
-        action space bounds ("clip" or other custom methods). (default: "clip")
-    :param Optional[torch.optim.lr_scheduler.LambdaLR] lr_scheduler: learning rate
-        scheduler for the optimizer. (default: None)
-
-
-    .. seealso::
-
-        Please refer to :class:`~fsrl.agent.BaseAgent` and
-        :class:`~fsrl.agent.OffpolicyAgent` for more details of usage.
-    """
+    """带PID拉格朗日的软演员-评论家（SAC）智能体。"""
 
     name = "SACLagAgent"
 
     def __init__(
         self,
-        env: gym.Env,
-        logger: BaseLogger = BaseLogger(),
-        cost_limit: float = 10,
-        # general task params
-        device: str = "cpu",
-        thread: int = 4,  # if use "cpu" to train
-        seed: int = 10,
-        # algorithm params
-        actor_lr: float = 5e-4,
-        critic_lr: float = 1e-3,
-        hidden_sizes: Tuple[int, ...] = (128, 128),
-        auto_alpha: bool = True,
-        alpha_lr: float = 3e-4,
-        alpha: float = 0.002,
-        tau: float = 0.05,
-        n_step: int = 2,
-        # Lagrangian specific arguments
-        use_lagrangian: bool = True,
-        lagrangian_pid: Tuple[float, ...] = (0.05, 0.0005, 0.1),
-        rescaling: bool = True,
-        # Base policy common arguments
-        gamma: float = 0.99,
-        conditioned_sigma: bool = True,
-        unbounded: bool = True,
-        last_layer_scale: bool = False,
-        deterministic_eval: bool = False,
-        action_scaling: bool = True,
-        action_bound_method: str = "clip",
-        lr_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None
+        env: gym.Env,  # 用于训练和评估智能体的环境
+        logger: BaseLogger = BaseLogger(),  # 日志记录器实例
+        cost_limit: float = 10,  # 拉格朗日优化的约束限制
+        # 通用任务参数
+        device: str = "cpu",  # 用于训练和推理的设备
+        thread: int = 4,  # 如果使用"cpu"进行训练
+        seed: int = 10,  # 用于可重现性的随机种子
+        # 算法参数
+        actor_lr: float = 5e-4,  # 演员网络的学习率
+        critic_lr: float = 1e-3,  # 评论家网络的学习率
+        hidden_sizes: Tuple[int, ...] = (128, 128),  # 隐藏层大小
+        auto_alpha: bool = True,  # 是否自动调整alpha（温度）
+        alpha_lr: float = 3e-4,  # 如果auto_alpha为True，alpha的学习率
+        alpha: float = 0.002,  # 熔规则化的初始温度
+        tau: float = 0.05,  # 目标网络软更新的目标平滑系数
+        n_step: int = 2,  # 多步学习的步数
+        # 拉格朗日特定参数
+        use_lagrangian: bool = True,  # 是否使用拉格朗日约束优化
+        lagrangian_pid: Tuple[float, ...] = (0.05, 0.0005, 0.1),  # PID系数
+        rescaling: bool = True,  # 是否使用重缩放技巧
+        # 基础策略通用参数
+        gamma: float = 0.99,  # 未来奖励的折扣因子
+        conditioned_sigma: bool = True,  # 高斯策略的方差是否以状态为条件
+        unbounded: bool = True,  # 动作空间是否无界
+        last_layer_scale: bool = False,  # 是否缩放策略网络的最后一层输出
+        deterministic_eval: bool = False,  # 评估时是否使用确定性动作选择
+        action_scaling: bool = True,  # 是否根据动作空间边界缩放动作
+        action_bound_method: str = "clip",  # 处理超界动作的方法
+        lr_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None  # 学习率调度器
     ) -> None:
         super().__init__()
 
@@ -114,11 +62,11 @@ class SACLagAgent(OffpolicyAgent):
         else:
             cost_dim = len(cost_limit)
 
-        # set seed and computing
+        # 设置种子和计算
         seed_all(seed)
         torch.set_num_threads(thread)
 
-        # model
+        # 模型
         state_shape = env.observation_space.shape or env.observation_space.n
         action_shape = env.action_space.shape or env.action_space.n
         max_action = env.action_space.high[0]
@@ -157,16 +105,16 @@ class SACLagAgent(OffpolicyAgent):
         )
 
         actor_critic = ActorCritic(actor, critics)
-        # orthogonal initialization
+        # 正交初始化
         for m in actor_critic.modules():
             if isinstance(m, torch.nn.Linear):
                 torch.nn.init.orthogonal_(m.weight)
                 torch.nn.init.zeros_(m.bias)
 
         if last_layer_scale:
-            # do last policy layer scaling, this will make initial actions have (close
-            # to) 0 mean and std, and will help boost performances, see
-            # https://arxiv.org/abs/2006.05990, Fig.24 for details
+            # 进行最后的策略层缩放，这将使初始动作具有（接近于）0均值和标准差，
+            # 有助于提升性能，详见
+            # https://arxiv.org/abs/2006.05990，图24
             for m in actor.mu.modules():
                 if isinstance(m, torch.nn.Linear):
                     torch.nn.init.zeros_(m.bias)

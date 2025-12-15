@@ -1,4 +1,4 @@
-"""The default MLP agent package."""
+"""默认MLP智能体包。"""
 
 from fsrl.agent.base_agent import BaseAgent, OffpolicyAgent, OnpolicyAgent
 from fsrl.agent.cpo_agent import CPOAgent

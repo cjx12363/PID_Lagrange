@@ -11,44 +11,19 @@ from fsrl.policy import BasePolicy
 
 
 class BasicCollector:
-    """A basic collector for a single environment.
+    """单环境基础收集器。
 
-    This collector doesn't support vector env and is served as experimental purpose. It
-    supports to store collected data in the :class:`~fsrl.data.TrajectoryBuffer` with a
-    grid filter, which can be used to memory-efficiently collect trajectory-wise
-    interaction dataset.
-
-    Example of data saving: ::
-
-        traj_buffer = TrajectoryBuffer(max_traj_num) collector = BasicCollector(policy,
-        env, traj_buffer=traj_buffer) collector.collect(n_episodes)
-
-        traj_buffer.save(logdir)
-
-    :param policy: an instance of the :class:`~fsrl.policy.BasePolicy` class.
-    :param env: a ``gym.Env`` environment or an instance of the
-        :class:`~tianshou.env.BaseVectorEnv` class.
-    :param buffer: an instance of the :class:`~tianshou.data.ReplayBuffer` class. If set
-        to None, it will not store the data. Default to None.
-    :param bool exploration_noise: determine whether the action needs to be modified with
-        corresponding policy's exploration noise. If so, "policy. exploration_noise(act,
-        batch)" will be called automatically to add the exploration noise into action.
-        Default to False.
-    :param TrajectoryBuffer traj_buffer: the buffer used to store trajectories
-
-    .. note::
-
-        Please make sure the given environment has a time limitation (can be done), \
-            because we only support the `n_episode` collect option.
+    此收集器不支持向量环境，仅用于实验目的。支持使用网格过滤器将数据存储在轨迹缓冲区中，
+    可用于高效收集轨迹级交互数据集。
     """
 
     def __init__(
         self,
-        policy: BasePolicy,
-        env: gym.Env,
-        buffer: Optional[ReplayBuffer] = None,
-        exploration_noise: Optional[bool] = False,
-        traj_buffer: Optional[TrajectoryBuffer] = None,
+        policy: BasePolicy,  # 策略实例
+        env: gym.Env,  # Gym环境
+        buffer: Optional[ReplayBuffer] = None,  # 重放缓冲区（None表示不存储数据）
+        exploration_noise: Optional[bool] = False,  # 是否添加探索噪声
+        traj_buffer: Optional[TrajectoryBuffer] = None,  # 轨迹缓冲区
     ):
         self.env = env
         self.policy = policy
@@ -67,15 +42,9 @@ class BasicCollector:
         reset_buffer: bool = True,
         gym_reset_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Reset the environment, statistics, current data and possibly replay memory.
-
-        :param bool reset_buffer: if true, reset the replay buffer that is attached to
-            the collector.
-        :param gym_reset_kwargs: extra keyword arguments to pass into the environment's
-            reset function. Defaults to None (extra keyword arguments)
-        """
-        # use empty Batch for "state" so that self.data supports slicing convert empty
-        # Batch to None when passing data to policy
+        """重置环境、统计信息、当前数据和重放内存。"""
+        # 使用空Batch作为"state"，使self.data支持切片
+        # 将空Batch转换为None传递给策略
         self.data = Batch(
             obs={},
             act={},
@@ -93,15 +62,15 @@ class BasicCollector:
         self.reset_stat()
 
     def reset_buffer(self, keep_statistics: bool = False) -> None:
-        """Reset the data buffer."""
+        """重置数据缓冲区。"""
         self.buffer.reset(keep_statistics=keep_statistics)
 
     def reset_stat(self) -> None:
-        """Reset the statistic variables."""
+        """重置统计变量。"""
         self.collect_step, self.collect_episode, self.collect_time = 0, 0, 0.0
 
     def reset_env(self, gym_reset_kwargs: Optional[Dict[str, Any]] = None) -> None:
-        """Reset all of the environments."""
+        """重置所有环境。"""
         gym_reset_kwargs = gym_reset_kwargs if gym_reset_kwargs else {}
         rval = self.env.reset(**gym_reset_kwargs)
         returns_info = isinstance(rval,
@@ -122,39 +91,7 @@ class BasicCollector:
         no_grad: bool = True,
         gym_reset_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Collect a specified number of step or episode.
-
-        To ensure unbiased sampling result with n_episode option, this function will
-        first collect ``n_episode - env_num`` episodes, then for the last ``env_num``
-        episodes, they will be collected evenly from each env.
-
-        :param int n_episode: how many episodes you want to collect.
-        :param bool random: whether to use random policy for collecting data. Default to
-            False.
-        :param float render: the sleep time between rendering consecutive frames. Default
-            to None (no rendering).
-        :param bool no_grad: whether to retain gradient in policy.forward(). Default to
-            True (no gradient retaining).
-        :param gym_reset_kwargs: extra keyword arguments to pass into the environment's
-            reset function. Defaults to None (extra keyword arguments)
-
-        .. note::
-
-            We don not support the `n_step` collection method in Tianshou, because using
-            `n_episode` only can facilitate the episodic cost computation and better
-            evaluate the agent.
-
-        :return: A dict including the following keys
-
-            * ``n/ep`` collected number of episodes.
-            * ``n/st`` collected number of steps.
-            * ``rew`` mean of episodic rewards.
-            * ``len`` mean of episodic lengths.
-            * ``total_cost`` cumulative costs in this collect.
-            * ``cost`` mean of episodic costs.
-            * ``truncated`` mean of episodic truncation.
-            * ``terminated`` mean of episodic termination.
-        """
+        """收集指定数量的episode。"""
         start_time = time.time()
 
         step_count = 0
@@ -166,7 +103,7 @@ class BasicCollector:
         episode_lens = []
 
         while True:
-            # get the next action
+            # 获取下一个动作
             if random:
                 act_sample = self._action_space.sample()
                 act_sample = self.policy.map_action_inverse(act_sample)
@@ -187,10 +124,9 @@ class BasicCollector:
                     act = self.policy.exploration_noise(act, self.data)
                 self.data.update(act=[act])
 
-            # get bounded and remapped actions first (not saved into buffer)
+            # 首先获取有界和重映射的动作（不保存到缓冲区）
             action_remap = np.squeeze(self.policy.map_action(self.data.act))
-            # print(action_remap.shape) print("Env action space shape: ",
-            # np.shape(self.env.action_space.sample())) step in env
+            # 在环境中执行步骤
             result = self.env.step(action_remap)
             if len(result) == 5:
                 obs_next, rew, terminated, truncated, info = result
@@ -232,7 +168,7 @@ class BasicCollector:
                 if render > 0 and not np.isclose(render, 0):
                     time.sleep(render)
 
-            # add data into the buffer
+            # 将数据添加到缓冲区
             ptr, ep_rew, ep_len, ep_idx = self.buffer.add(self.data, 1)
 
             if self.traj_buffer is not None:
@@ -253,8 +189,8 @@ class BasicCollector:
                 episode_count += 1
                 episode_lens.append(ep_len)
                 episode_rews.append(ep_rew)
-                # now we copy obs_next to obs, but since there might be finished
-                # episodes, we have to reset finished envs first.
+                # 现在将obs_next复制到obs，但由于可能有已完成的episode，
+                # 我们必须先重置已完成的环境
                 self.reset_env(gym_reset_kwargs)
 
             self.data.obs = self.data.obs_next
@@ -262,7 +198,7 @@ class BasicCollector:
             if episode_count >= n_episode:
                 break
 
-        # generate statistics
+        # 生成统计信息
         self.collect_step += step_count
         self.collect_episode += episode_count
         self.collect_time += max(time.time() - start_time, 1e-9)

@@ -17,84 +17,39 @@ from fsrl.utils.net.common import ActorCritic
 
 
 class CPOAgent(OnpolicyAgent):
-    """A CPO (Constrained Policy Optimization) agent.
-
-    :param gym.Env env: The environment to train and evaluate the agent on.
-    :param BaseLogger logger: A logger instance to log training and evaluation
-        statistics, default to a dummy logger.
-    :param float cost_limit: The maximum constraint cost allowed, default to 10.
-    :param str device: The device to use for training and inference, default to "cpu".
-    :param int thread: The number of threads to use for training, ignored if `device` is
-        "cuda", default to 4.
-    :param int seed: The random seed for reproducibility, default to 10.
-    :param float lr: The learning rate, default to 1e-3.
-    :param Tuple[int, ...] hidden_sizes: The sizes of the hidden layers for the policy
-        and value networks, default to (128, 128).
-    :param bool unbounded: Whether the action space is unbounded, default to False.
-    :param bool last_layer_scale: Whether to scale the last layer output for the policy
-        network, default to False.
-    :param float target_kl: The target KL divergence for the policy update, default to
-        0.01.
-    :param float backtrack_coeff: The coefficient for backtracking, default to 0.8.
-    :param float damping_coeff: The coefficient for the damping, default to 0.1.
-    :param int max_backtracks: The maximum number of backtracking steps, default to 10.
-    :param int optim_critic_iters: The number of iterations to optimize the critic,
-        default to 10.
-    :param float l2_reg: The L2 regularization coefficient, default to 0.001.
-    :param float gae_lambda: The lambda parameter for generalized advantage estimation,
-        default to 0.95.
-    :param bool advantage_normalization: Whether to normalize advantages, default to
-        True.
-    :param float gamma: The discount factor for future rewards and costs, default to
-        0.99.
-    :param int max_batchsize: The maximum batch size for computing advantages etc,
-        default to 99999.
-    :param bool reward_normalization: Whether to normalize rewards, default to False.
-    :param bool deterministic_eval: Whether to use deterministic actions during
-        evaluation, default to True.
-    :param bool action_scaling: Whether to scale the action space, default to True.
-    :param str action_bound_method: The method to bound actions ("clip" or "tanh"),
-        default to "clip".
-    :param Optional[torch.optim.lr_scheduler.LambdaLR] lr_scheduler: A learning rate
-        scheduler, default to None.
-
-    .. seealso::
-
-        Please refer to :class:`~fsrl.agent.BaseAgent` and
-        :class:`~fsrl.agent.OnpolicyAgent` for more details of usage.
-    """
+    """CPO（约束策略优化）智能体。"""
 
     name = "CPOAgent"
 
     def __init__(
         self,
-        env: gym.Env,
-        logger: BaseLogger = BaseLogger(),
-        cost_limit: float = 10,
-        device: str = "cpu",
-        thread: int = 4,  # if use "cpu" to train
-        seed: int = 10,
-        lr: float = 1e-3,
-        hidden_sizes: Tuple[int, ...] = (128, 128),
-        unbounded: bool = False,
-        last_layer_scale: bool = False,
-        # CPO specific arguments
-        target_kl: float = 0.01,
-        backtrack_coeff: float = 0.8,
-        damping_coeff: float = 0.1,
-        max_backtracks: int = 10,
-        optim_critic_iters: int = 10,
-        l2_reg: float = 0.001,
-        gae_lambda: float = 0.95,
-        advantage_normalization: bool = True,
-        # Base policy common arguments
-        gamma: float = 0.99,
-        max_batchsize: int = 99999,
-        reward_normalization: bool = False,  # can decrease final perf
-        deterministic_eval: bool = True,
-        action_scaling: bool = True,
-        action_bound_method: str = "clip",
-        lr_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None
+        env: gym.Env,  # 用于训练和评估智能体的环境
+        logger: BaseLogger = BaseLogger(),  # 日志记录器实例
+        cost_limit: float = 10,  # 允许的最大约束成本
+        device: str = "cpu",  # 用于训练和推理的设备
+        thread: int = 4,  # 如果使用"cpu"进行训练
+        seed: int = 10,  # 用于可重现性的随机种子
+        lr: float = 1e-3,  # 学习率
+        hidden_sizes: Tuple[int, ...] = (128, 128),  # 隐藏层大小
+        unbounded: bool = False,  # 动作空间是否无界
+        last_layer_scale: bool = False,  # 是否缩放策略网络的最后一层输出
+        # CPO特定参数
+        target_kl: float = 0.01,  # 策略更新的目标KL散度
+        backtrack_coeff: float = 0.8,  # 回溯系数
+        damping_coeff: float = 0.1,  # 阻尼系数
+        max_backtracks: int = 10,  # 最大回溯步数
+        optim_critic_iters: int = 10,  # 优化评论家的迭代次数
+        l2_reg: float = 0.001,  # L2正则化系数
+        gae_lambda: float = 0.95,  # 广义优势估计的lambda参数
+        advantage_normalization: bool = True,  # 是否归一化优势
+        # 基础策略通用参数
+        gamma: float = 0.99,  # 未来奖励和成本的折扣因子
+        max_batchsize: int = 99999,  # 计算优势等的最大批次大小
+        reward_normalization: bool = False,  # 是否归一化奖励（可能降低最终性能）
+        deterministic_eval: bool = True,  # 评估期间是否使用确定性动作
+        action_scaling: bool = True,  # 是否缩放动作空间
+        action_bound_method: str = "clip",  # 约束动作的方法
+        lr_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None  # 学习率调度器
     ) -> None:
         super().__init__()
 
@@ -109,11 +64,11 @@ class CPOAgent(OnpolicyAgent):
                 for related discussions."
             )
 
-        # set seed and computing
+        # 设置种子和计算
         seed_all(seed)
         torch.set_num_threads(thread)
 
-        # model
+        # 模型
         state_shape = env.observation_space.shape or env.observation_space.n
         action_shape = env.action_space.shape or env.action_space.n
         max_action = env.action_space.high[0]
@@ -131,15 +86,15 @@ class CPOAgent(OnpolicyAgent):
 
         torch.nn.init.constant_(actor.sigma_param, -0.5)
         actor_critic = ActorCritic(actor, critic)
-        # orthogonal initialization
+        # 正交初始化
         for m in actor_critic.modules():
             if isinstance(m, torch.nn.Linear):
                 torch.nn.init.orthogonal_(m.weight)
                 torch.nn.init.zeros_(m.bias)
         if last_layer_scale:
-            # do last policy layer scaling, this will make initial actions have (close
-            # to) 0 mean and std, and will help boost performances, see
-            # https://arxiv.org/abs/2006.05990, Fig.24 for details
+            # 进行最后的策略层缩放，这将使初始动作具有（接近于）0均值和标准差，
+            # 有助于提升性能，详见
+            # https://arxiv.org/abs/2006.05990，图24
             for m in actor.mu.modules():
                 if isinstance(m, torch.nn.Linear):
                     torch.nn.init.zeros_(m.bias)
@@ -147,8 +102,8 @@ class CPOAgent(OnpolicyAgent):
         # optim = torch.optim.Adam(actor_critic.parameters(), lr=lr)
         optim = torch.optim.Adam(nn.ModuleList(critic).parameters(), lr=lr)
 
-        # replace DiagGuassian with Independent(Normal) which is equivalent pass *logits
-        # to be consistent with policy.forward
+        # 用Independent(Normal)替换DiagGuassian，它们是等价的
+        # 传递*logits以保持与policy.forward一致
         def dist(*logits):
             return Independent(Normal(*logits), 1)
 
@@ -158,7 +113,7 @@ class CPOAgent(OnpolicyAgent):
             optim,
             dist,  # type: ignore
             logger=logger,
-            # CPO specific arguments
+            # CPO特定参数
             target_kl=target_kl,
             backtrack_coeff=backtrack_coeff,
             damping_coeff=damping_coeff,
@@ -168,7 +123,7 @@ class CPOAgent(OnpolicyAgent):
             gae_lambda=gae_lambda,
             advantage_normalization=advantage_normalization,
             cost_limit=cost_limit,
-            # Base policy common arguments
+            # 基础策略通用参数
             gamma=gamma,
             max_batchsize=max_batchsize,
             reward_normalization=reward_normalization,
@@ -198,7 +153,7 @@ class CPOAgent(OnpolicyAgent):
         verbose: bool = True,
         show_progress: bool = True
     ) -> None:
-        """See :meth:`~fsrl.agent.OnpolicyAgent.learn` for details."""
+        """详情请参见 :meth:`~fsrl.agent.OnpolicyAgent.learn`。"""
         return super().learn(
             train_envs, test_envs, epoch, episode_per_collect, step_per_epoch,
             repeat_per_collect, buffer_size, testing_num, batch_size, reward_threshold,
