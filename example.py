@@ -1,20 +1,25 @@
 """
-此脚本用于评估 ev2gym 环境的性能。gdfgd
+此脚本用于评估 ev2gym 环境的性能。
 """
-from ev2gym.models.ev2gym_env import EV2Gym
-from ev2gym.baselines.gurobi_models.tracking_error import PowerTrackingErrorrMin
-from ev2gym.baselines.gurobi_models.profit_max import V2GProfitMaxOracleGB
-from ev2gym.baselines.mpc.ocmf_mpc import OCMF_V2G, OCMF_G2V
-from ev2gym.baselines.mpc.eMPC import eMPC_V2G, eMPC_G2V
+import sys
+import os
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ev2gym.baselines.mpc.eMPC_v2 import eMPC_V2G_v2, eMPC_G2V_v2
+from environments.models.ev2gym_env import EV2Gym
 
-from ev2gym.baselines.mpc.V2GProfitMax import V2GProfitMaxOracle
+# MPC和Gurobi模块需要gurobi依赖，设为延迟导入
+# from algorithms.baselines.gurobi.tracking_error import PowerTrackingErrorrMin
+# from algorithms.baselines.gurobi.profit_max import V2GProfitMaxOracleGB
+# from algorithms.baselines.mpc.ocmf_mpc import OCMF_V2G, OCMF_G2V
+# from algorithms.baselines.mpc.eMPC import eMPC_V2G, eMPC_G2V
+# from algorithms.baselines.mpc.eMPC_v2 import eMPC_V2G_v2, eMPC_G2V_v2
+# from algorithms.baselines.mpc.V2GProfitMax import V2GProfitMaxOracle
 
-from ev2gym.baselines.heuristics import RoundRobin, RoundRobin_1transformer_powerlimit, ChargeAsFastAsPossible
-from ev2gym.baselines.heuristics import ChargeAsFastAsPossibleToDesiredCapacity
+from algorithms.baselines.heuristics.heuristics import RoundRobin, RoundRobin_1transformer_powerlimit, ChargeAsFastAsPossible
+from algorithms.baselines.heuristics.heuristics import ChargeAsFastAsPossibleToDesiredCapacity
 
-from cost_functions import usrpenalty_cost, tr_overload_usrpenalty_cost, ProfitMax_TrPenalty_UserIncentives_safety
+from environments.rl_integration.cost_functions import usrpenalty_cost, tr_overload_usrpenalty_cost, ProfitMax_TrPenalty_UserIncentives_safety
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -38,7 +43,7 @@ def eval():
     replay_path = None # 设置为 None 表示生成新的随机场景
 
     # 配置文件路径
-    config_file = "ev2gym/example_config_files/V2GProfitMax.yaml"
+    config_file = "environments/config/V2GProfitMax.yaml"
     #config_file = "V2GProfit_base.yaml"
 
     # 初始化环境
@@ -118,6 +123,9 @@ def eval():
     # run_oracle 配置已移至函数开头
 
     if run_oracle:
+        # 延迟导入Gurobi模块
+        from algorithms.baselines.gurobi.profit_max import V2GProfitMaxOracleGB
+        
         # V2GProfitMaxOracleGB 使用 Gurobi 求解器，在已知未来的情况下计算理论最大利润
         agent = V2GProfitMaxOracleGB(replay_path=new_replay_path)
 

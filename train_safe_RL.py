@@ -3,13 +3,13 @@
 import warnings
 warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
 
-from ev2gym.models.ev2gym_env import EV2Gym
-from ev2gym.rl_agent.reward import SquaredTrackingErrorReward, ProfitMax_TrPenalty_UserIncentives
-from ev2gym.rl_agent.reward import profit_maximization
+from environments.models.ev2gym_env import EV2Gym
+from environments.rl_integration.reward import SquaredTrackingErrorReward, ProfitMax_TrPenalty_UserIncentives
+from environments.rl_integration.reward import profit_maximization
 
-from cost_functions import tr_overload_usrpenalty_cost, usrpenalty_cost, ProfitMax_TrPenalty_UserIncentives_safety, paper_cost_function
+from environments.rl_integration.cost_functions import tr_overload_usrpenalty_cost, usrpenalty_cost, ProfitMax_TrPenalty_UserIncentives_safety, paper_cost_function
 
-from ev2gym.rl_agent.state import V2G_profit_max, PublicPST, V2G_profit_max_loads
+from environments.rl_integration.state import V2G_profit_max, PublicPST, V2G_profit_max_loads
 
 import gymnasium as gym
 import argparse
@@ -22,9 +22,9 @@ import torch
 import torch.nn as nn
 from torch.distributions import Independent, Normal
 
-from ev2gym.rl_agent.reward import SquaredTrackingErrorReward, ProfitMax_TrPenalty_UserIncentives
-from ev2gym.rl_agent.reward import profit_maximization, paper_reward_function
-from ev2gym.rl_agent.state import V2G_profit_max, PublicPST, V2G_profit_max_loads
+from environments.rl_integration.reward import SquaredTrackingErrorReward, ProfitMax_TrPenalty_UserIncentives
+from environments.rl_integration.reward import profit_maximization, paper_reward_function
+from environments.rl_integration.state import V2G_profit_max, PublicPST, V2G_profit_max_loads
 
 import pprint
 from dataclasses import asdict
@@ -35,14 +35,14 @@ from tianshou.utils.net.common import Net
 from tianshou.utils.net.continuous import ActorProb
 
 
-from fsrl.data import FastCollector
-from fsrl.agent import SACLagAgent, PPOLagAgent, CPOAgent, CVPOAgent
-from fsrl.policy import CVPO
-from fsrl.trainer import OffpolicyTrainer
-from fsrl.utils import TensorboardLogger, WandbLogger
-from fsrl.utils.exp_util import auto_name, seed_all
-from fsrl.utils.net.common import ActorCritic
-from fsrl.utils.net.continuous import DoubleCritic, SingleCritic
+from algorithms.fsrl.data import FastCollector
+from algorithms.fsrl.agent import SACLagAgent, PPOLagAgent, CPOAgent, CVPOAgent
+from algorithms.fsrl.policy import CVPO
+from algorithms.fsrl.trainer import OffpolicyTrainer
+from algorithms.fsrl.utils import TensorboardLogger, WandbLogger
+from algorithms.fsrl.utils.exp_util import auto_name, seed_all
+from algorithms.fsrl.utils.net.common import ActorCritic
+from algorithms.fsrl.utils.net.continuous import DoubleCritic, SingleCritic
 
 from dataclasses import dataclass
 from typing import Tuple
@@ -71,10 +71,10 @@ SEED = 10                     # 随机种子
 # ===============================================================
 
 # 环境配置
-config_file = "config/V2GProfit_base.yaml"
+config_file = "environments/config/V2GProfit_base.yaml"
 # config_file = "V2GProfit_loads.yaml"
 
-if config_file == "config/V2GProfit_base.yaml":
+if config_file == "environments/config/V2GProfit_base.yaml":
         state_function = V2G_profit_max
         cost_function = paper_cost_function
 
@@ -88,7 +88,7 @@ cost_function = paper_cost_function
 # 注册自定义环境
 gym.envs.register(
 id='fsrl-v0',
-entry_point='ev2gym.models.ev2gym_env:EV2Gym',
+entry_point='environments.models.ev2gym_env:EV2Gym',
 kwargs={
         'config_file': config_file,
         'verbose': False,
