@@ -1,0 +1,81 @@
+# PID-Lagrangian Safe RL - aggressive overload scenario
+
+timescale: 15
+simulation_length: 96  # 24 hours at 15-min steps
+
+year: 2022
+month: 1
+day: 17
+random_day: True
+random_hour: False
+hour: 6
+minute: 0
+simulation_days: weekdays
+
+scenario: workplace
+spawn_multiplier: 10
+
+discharge_price_factor: 1
+
+v2g_enabled: True
+number_of_charging_stations: 10
+number_of_transformers: 1
+number_of_ports_per_cs: 2
+charging_network_topology: None
+simulate_grid: False
+
+network_info:
+  vm_pu: 1.0
+  s_base: 1000
+  load_multiplier: 1
+  pv_scale: 80
+  bus_info_file: ./ev2gym/data/network_data/node_34/Nodes_34.csv
+  branch_info_file: ./ev2gym/data/network_data/node_34/Lines_34.csv
+
+pf_solver: Laurent
+
+power_setpoint_enabled: False
+tr_seed: -1
+
+inflexible_loads:
+  include: True
+  inflexible_loads_capacity_multiplier_mean: 3  # triple background load
+  forecast_mean: 30
+  forecast_std: 5
+
+solar_power:
+  include: False  # no solar to offset load
+
+demand_response:
+  include: False
+
+heterogeneous_ev_specs: True
+ev_specs_file: ./ev2gym/data/ev_specs_v2g_enabled2024.json
+
+transformer:
+  max_power: 30  # kW -- very tight
+
+charging_station:
+  min_charge_current: 0
+  max_charge_current: 32
+  min_discharge_current: 0
+  max_discharge_current: -32
+  voltage: 400
+  phases: 3
+
+ev:
+  battery_capacity: 50
+  max_ac_charge_power: 11
+  min_ac_charge_power: 0
+  max_dc_charge_power: 50
+  max_discharge_power: -11
+  min_discharge_power: 0
+  ev_phases: 3
+  charge_efficiency: 1
+  discharge_efficiency: 1
+  transition_soc: 1
+  min_battery_capacity: 5
+  min_time_of_stay: 180
+  min_emergency_battery_capacity: 25
+  desired_capacity: 1
+  transition_soc_multiplier: 5
