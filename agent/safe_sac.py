@@ -119,32 +119,32 @@ class SafeSAC:
         loss_R.backward()
         self.critic_R_optim.step()
 
-        # --- Update Safety Critics ---
-        with torch.no_grad():
-            next_actions_s, _ = self.actor.sample(next_obs)
-            q_C1_next = self.critic_C1_target(next_obs, next_actions_s)
-            q_C2_next = self.critic_C2_target(next_obs, next_actions_s)
-            q_C_next = torch.min(q_C1_next, q_C2_next)
-            q_C_target = costs + self.gamma * (1 - dones) * q_C_next
+        # --- Update Safety Critics (x2 for faster convergence) ---
+        for _ in range(2):
+            with torch.no_grad():
+                next_actions_s, _ = self.actor.sample(next_obs)
+                q_C1_next = self.critic_C1_target(next_obs, next_actions_s)
+                q_C2_next = self.critic_C2_target(next_obs, next_actions_s)
+                q_C_next = torch.min(q_C1_next, q_C2_next)
+                q_C_target = costs + self.gamma * (1 - dones) * q_C_next
 
-        q_C1 = self.critic_C1(obs, actions)
-        q_C2 = self.critic_C2(obs, actions)
-        loss_C = F.mse_loss(q_C1, q_C_target) + F.mse_loss(q_C2, q_C_target)
+            q_C1 = self.critic_C1(obs, actions)
+            q_C2 = self.critic_C2(obs, actions)
+            loss_C = F.mse_loss(q_C1, q_C_target) + F.mse_loss(q_C2, q_C_target)
 
-        self.critic_C_optim.zero_grad()
-        loss_C.backward()
-        self.critic_C_optim.step()
+            self.critic_C_optim.zero_grad()
+            loss_C.backward()
+            self.critic_C_optim.step()
 
         # --- Update Actor (with PID rescaling) ---
         actions_pi, log_prob = self.actor.sample(obs)
         q_R_pi = torch.min(self.critic_R1(obs, actions_pi), self.critic_R2(obs, actions_pi))
         q_C_pi = torch.min(self.critic_C1(obs, actions_pi), self.critic_C2(obs, actions_pi))
 
-        # Actor loss: E[alpha * log_pi - (min Q_R - lambda * min Q_C)]
-        actor_loss_inner = self.alpha * log_prob - q_R_pi + self.lam * q_C_pi
-        # Target rescaling: 1 / (1 + lambda) (Stooke et al., Eq. 12)
-        rescale = 1.0 / (1.0 + self.lam)
-        loss_actor = (rescale * actor_loss_inner).mean()
+        # Actor loss: standard SAC (cost penalty is in augmented reward)
+        # lambda * cost penalty is applied directly to reward, not via Safety Critic
+        actor_loss_inner = self.alpha * log_prob - q_R_pi
+        loss_actor = actor_loss_inner.mean()
 
         self.actor_optim.zero_grad()
         loss_actor.backward()

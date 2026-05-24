@@ -1,7 +1,7 @@
-# PID-Lagrangian Safe RL - aggressive overload scenario
+# PID-Lagrangian - real safety tradeoff: profit vs transformer overload
 
 timescale: 15
-simulation_length: 96  # 24 hours at 15-min steps
+simulation_length: 96
 
 year: 2022
 month: 1
@@ -13,11 +13,11 @@ minute: 0
 simulation_days: weekdays
 
 scenario: workplace
-spawn_multiplier: 10
+spawn_multiplier: 8
 
 discharge_price_factor: 1
 
-v2g_enabled: True
+v2g_enabled: False  # charge only, simpler action space
 number_of_charging_stations: 10
 number_of_transformers: 1
 number_of_ports_per_cs: 2
@@ -39,12 +39,12 @@ tr_seed: -1
 
 inflexible_loads:
   include: True
-  inflexible_loads_capacity_multiplier_mean: 3  # triple background load
+  inflexible_loads_capacity_multiplier_mean: 1
   forecast_mean: 30
   forecast_std: 5
 
 solar_power:
-  include: False  # no solar to offset load
+  include: False
 
 demand_response:
   include: False
@@ -52,14 +52,16 @@ demand_response:
 heterogeneous_ev_specs: True
 ev_specs_file: ./ev2gym/data/ev_specs_v2g_enabled2024.json
 
+# 40kW transformer with 20 ports (max 220kW theoretical)
+# Creates a real tradeoff: charge more = more profit but risks overload
 transformer:
-  max_power: 30  # kW -- very tight
+  max_power: 40
 
 charging_station:
   min_charge_current: 0
   max_charge_current: 32
   min_discharge_current: 0
-  max_discharge_current: -32
+  max_discharge_current: 0
   voltage: 400
   phases: 3
 

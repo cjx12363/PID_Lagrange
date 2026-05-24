@@ -1,7 +1,15 @@
-"""Fixed training script with:
-1. Cost added directly to reward as penalty (scale=100) so actor learns to avoid overload
-2. Realistic d based on environment dynamics (d=5, achievable target)
-3. Env reuse + reduced gradient steps (kept from optimization)
+"""Training script v3: Direct cost-penalized reward with PID-tuned lambda.
+
+Architecture:
+  augmented_reward = reward - lambda * COST_PENALTY * cost
+  PID adjusts lambda per episode based on J_C vs d.
+  
+This bypasses the Safety Critic entirely -- the cost signal flows directly
+through the reward, which the Reward Critic captures reliably.
+The PID only needs to find the right lambda to balance profit vs safety.
+
+Key insight: for sparse/small-magnitude costs, Safety Critic learning is
+the bottleneck. Direct cost penalty avoids this bottleneck entirely.
 """
 import os, sys, json, time, argparse
 import numpy as np
@@ -17,22 +25,26 @@ from ev2gym.rl_agent.cost import transformer_overload_cost
 
 from agent.safe_sac import SafeSAC
 from agent.buffer import ReplayBuffer
-from config import CONFIG, LAGRANGIAN_CONFIG, UNCONSTRAINED_CONFIG
 
-COST_PENALTY = 100.0  # multiplier: cost -> reward penalty, makes safety signal comparable to profit signal
+COST_PENALTY = 20.0  # per-unit overload penalty in reward space (~profit scale)
 
-BASELINES = {
-    "pid": CONFIG,
-    "lagrangian": LAGRANGIAN_CONFIG,
-    "unconstrained": UNCONSTRAINED_CONFIG,
-}
-
-# Fix PID params for realistic d
-for cfg in [BASELINES["pid"], BASELINES["lagrangian"]]:
-    cfg["pid"]["d"] = 5.0
-    cfg["pid"]["K_P"] = 0.05
-    cfg["pid"]["K_I"] = 0.005
-    cfg["pid"]["K_D"] = 0.02
+def make_config(run_type):
+    base = {
+        "device": "cuda", "gamma": 0.99, "tau": 0.005, "lr": 1e-4,
+        "alpha_lr": 3e-4, "batch_size": 256, "cost_scale": 1.0,
+        "gradient_steps_per_episode": 50, "total_episodes": 150,
+        "eval_every": 25, "eval_episodes": 5,
+        "config_file": "ev2gym/example_config_files/PID_Lagrangian.yaml",
+        "log_dir": "./logs", "save_dir": "./checkpoints",
+        "buffer_capacity": int(1e6),
+    }
+    if run_type == "pid":
+        base["pid"] = {"K_P": 0.3, "K_I": 0.01, "K_D": 0.05, "d": 3.0}
+    elif run_type == "lagrangian":
+        base["pid"] = {"K_P": 0.0, "K_I": 0.01, "K_D": 0.0, "d": 3.0}
+    elif run_type == "unconstrained":
+        base["pid"] = {"K_P": 0.0, "K_I": 0.0, "K_D": 0.0, "d": 1e9}
+    return base
 
 def evaluate(agent, env, num_episodes=5):
     rewards, costs = [], []
@@ -44,20 +56,16 @@ def evaluate(agent, env, num_episodes=5):
             obs, reward, done, truncated, info = env.step(action)
             ep_r += reward
             c = info.get("cost", 0.0)
-            if c is not None:
-                ep_c += c
+            if c is not None: ep_c += c
         rewards.append(ep_r)
         costs.append(ep_c)
     return np.mean(rewards), np.std(rewards), np.mean(costs), np.std(costs)
 
-
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="pid",
-                        choices=["pid", "lagrangian", "unconstrained"])
+    parser.add_argument("--config", default="pid", choices=["pid","lagrangian","unconstrained"])
     args = parser.parse_args()
-
-    config = BASELINES[args.config]
+    config = make_config(args.config)
     run_name = args.config
 
     log_dir = os.path.join(config["log_dir"], run_name)
@@ -65,28 +73,19 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(save_dir, exist_ok=True)
 
-    env = EV2Gym(
-        config_file=config["config_file"],
-        state_function=V2G_profit_max_loads,
-        reward_function=V2G_profitmaxV2,
-        cost_function=transformer_overload_cost,
-        generate_rnd_game=True,
-        verbose=False,
-    )
-    obs_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.shape[0]
-    print(f"Run: {run_name} | Obs: {obs_dim}, Act: {act_dim}")
-    print(f"PID: {config['pid']} | Gradient steps/ep: {config['gradient_steps_per_episode']}")
+    env = EV2Gym(config_file=config["config_file"],
+                 state_function=V2G_profit_max_loads, reward_function=V2G_profitmaxV2,
+                 cost_function=transformer_overload_cost,
+                 generate_rnd_game=True, verbose=False)
+    obs_dim, act_dim = env.observation_space.shape[0], env.action_space.shape[0]
+    print(f"Run: {run_name} | Obs: {obs_dim}, Act: {act_dim} | PID: {config['pid']}")
 
     agent = SafeSAC(obs_dim, act_dim, config)
     buffer = ReplayBuffer(obs_dim, act_dim, capacity=config["buffer_capacity"])
 
-    log = {
-        "run": run_name,
-        "episodes": [], "rewards": [], "costs": [], "lambdas": [], "alphas": [],
-        "eval_episodes": [], "eval_rewards": [], "eval_rewards_std": [],
-        "eval_costs": [], "eval_costs_std": [],
-    }
+    log = {"run": run_name, "episodes": [], "rewards": [], "costs": [], "lambdas": [], "alphas": [],
+           "eval_episodes": [], "eval_rewards": [], "eval_rewards_std": [],
+           "eval_costs": [], "eval_costs_std": []}
 
     start_time = time.time()
 
@@ -97,42 +96,32 @@ def main():
         while not done:
             action = agent.select_action(obs)
             next_obs, reward, done, truncated, info = env.step(action)
-            cost = info.get("cost", 0.0)
-            if cost is None:
-                cost = 0.0
-            # Safety penalty: subtract cost from reward so actor directly learns to avoid overload
-            augmented_reward = reward - COST_PENALTY * cost
-            buffer.add(obs, action, augmented_reward, cost * config["cost_scale"],
+            cost = info.get("cost", 0.0) or 0.0
+            # Direct cost penalty: lambda * COST_PENALTY * cost
+            aug_reward = reward - agent.lam * COST_PENALTY * cost
+            # Safety critic gets cost as-is (for logging; not used in actor loss)
+            buffer.add(obs, action, aug_reward, cost * config["cost_scale"],
                        next_obs, float(done))
-            ep_r += reward
-            ep_c += cost
-            obs = next_obs
+            ep_r += reward; ep_c += cost; obs = next_obs
 
         for _ in range(config["gradient_steps_per_episode"]):
             agent.update(buffer)
 
         agent.update_pid(ep_c)
 
-        log["episodes"].append(ep)
-        log["rewards"].append(ep_r)
-        log["costs"].append(ep_c)
-        log["lambdas"].append(agent.lam)
+        log["episodes"].append(ep); log["rewards"].append(ep_r)
+        log["costs"].append(ep_c); log["lambdas"].append(agent.lam)
         log["alphas"].append(agent.alpha.item())
 
         elapsed = time.time() - start_time
-        print(f"Ep {ep:4d} | R: {ep_r:8.2f} | C: {ep_c:7.2f} | "
-              f"lam: {agent.lam:6.3f} | alpha: {agent.alpha.item():.4f} | "
-              f"t: {elapsed:.0f}s")
+        print(f"Ep {ep:4d} | R: {ep_r:8.1f} | C: {ep_c:7.2f} | lam: {agent.lam:6.3f} | t: {elapsed:.0f}s")
 
         if ep % config["eval_every"] == 0 or ep == config["total_episodes"]:
-            mean_r, std_r, mean_c, std_c = evaluate(agent, env, config["eval_episodes"])
-            log["eval_episodes"].append(ep)
-            log["eval_rewards"].append(mean_r)
-            log["eval_rewards_std"].append(std_r)
-            log["eval_costs"].append(mean_c)
-            log["eval_costs_std"].append(std_c)
-            print(f"  >>> Eval | R: {mean_r:8.2f} +- {std_r:.2f} | "
-                  f"C: {mean_c:6.2f} +- {std_c:.2f}")
+            mr, sr, mc, sc = evaluate(agent, env, config["eval_episodes"])
+            log["eval_episodes"].append(ep); log["eval_rewards"].append(mr)
+            log["eval_rewards_std"].append(sr); log["eval_costs"].append(mc)
+            log["eval_costs_std"].append(sc)
+            print(f"  Eval | R: {mr:8.1f} +- {sr:.1f} | C: {mc:6.2f} +- {sc:.2f}")
             agent.save(os.path.join(save_dir, f"checkpoint_ep{ep}.pt"))
             with open(os.path.join(log_dir, "training_log.json"), "w") as f:
                 json.dump(log, f)
@@ -141,11 +130,7 @@ def main():
     agent.save(os.path.join(save_dir, "final_model.pt"))
     with open(os.path.join(log_dir, "training_log.json"), "w") as f:
         json.dump(log, f)
-
-    total_time = time.time() - start_time
-    print(f"\nTraining complete in {total_time:.0f}s ({total_time/60:.1f}min)")
-    print(f"Logs: {log_dir}/training_log.json")
-
+    print(f"\nDone in {time.time()-start_time:.0f}s")
 
 if __name__ == "__main__":
     main()
