@@ -2,30 +2,22 @@
 __pycache__/
 *.pyc
 *.pyo
-
 # Checkpoints & logs
 checkpoints/
 logs/
-
 # Data (large, already in EV2Gym)
 EV2Gym/ev2gym/data/*.csv
 EV2Gym/ev2gym/data/*.npy
 EV2Gym/ev2gym/data/*.json
-
 # Papers (binary PDFs)
 papers/
-
 # Results (generated)
 results/
-
 # Environment
 .env
 .venv/
-
 # OS
 .DS_Store
 Thumbs.db
-
 # Documents
-*.docx
-∏¥œ÷º∆ªÆ.md
+others/
